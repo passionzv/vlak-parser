@@ -18,15 +18,24 @@ app.post("/parse", async (req, res) => {
 
         const text = data.text;
 
-        const dateTime = text.match(/(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})/)?.[1];
-        const train = text.match(/Vlak:\s+0*(\d+)/)?.[1];
+        // dátum a čas - prvý výskyt dátumu a času
+const dateTime =
+    text.match(/\b(\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2})/)?.[1];
 
-        const hkv = text.match(/HKV:\s+(\d{12})/)?.[1];
-        let hdv = null;
-        if (hkv) {
-            const last7 = hkv.slice(-7);
-            hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
-        }
+// vlak - prvých 6 číslic na začiatku riadku
+const train =
+    text.match(/\b0*(\d{3,6})\s+[A-Z]\b/)?.[1];
+
+// HDV číslo – prvé 12-miestne číslo
+const hkv =
+    text.match(/\b(\d{12})\b/)?.[1];
+
+let hdv = null;
+if (hkv) {
+    const last7 = hkv.slice(-7);
+    hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
+}
+
 
         const driverMatch = text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\s*\/\+?(\d+)/);
         const wagons = text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
