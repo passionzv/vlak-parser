@@ -24,7 +24,7 @@ const dateTime =
 
 // vlak - prvých 6 číslic na začiatku riadku
 const train =
-    text.match(/\b0*(\d{3,6})\s+[A-Z]\b/)?.[1];
+    text.match(/\b0*(\d{1,6})\b(?=.*\s+[A-Z]\b)/)?.[1];
 
 // HDV číslo – prvé 12-miestne číslo
 const hkv =
