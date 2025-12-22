@@ -9,84 +9,70 @@ app.use(express.json());
 
 app.get("/keepalive",(req,res)=>res.send("ok"));
 
-// extrakcia z konkrétnej sekcie
-function extractHKV(text, label) {
+// extrahuje jediné HKV za sekciou (prázdne = null)
+function extractHKV(text,label){
 
-    const regex = new RegExp(label + "[\\s\\S]*?(?=\\n[A-ZÁ-Ža-z ]+\\n|$)");
-    const block = text.match(regex);
+    const match = text.match(new RegExp(label + "\\s+(\\d{12})"));
+    if(!match) return null;
 
-    if (!block) return null;
-
-    const hkv = block[0].match(/\b\d{12}\b/g);
-    if (!hkv) return null;
-
-    return hkv.map(str=>{
-        const last7 = str.slice(-7);
-        return `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
-    });
+    const raw = match[1];
+    const last7 = raw.slice(-7);
+    return `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
 }
 
-
-app.post("/parse", async (req,res)=>{
+app.post("/parse", async(req,res)=>{
 
     try{
         const pdfResp = await fetch(req.body.url);
-        const buffer = await pdfResp.arrayBuffer();
-        const parsed = await pdf(Buffer.from(buffer));
+        const buf = await pdfResp.arrayBuffer();
+        const parsed = await pdf(Buffer.from(buf));
         const text = parsed.text;
 
         // dátum + čas
         const dateTime = text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
 
-        // vlak – ignorujeme čísla staníc, berieme priamo 0+vlakovú formu
-        const train = text.match(/\b0*(\d{3,6})\s+[A-Z](?=\s+\d\d\.)/)?.[1];
+        // vlak – skutočný formát:
+        // 000912 R 22.12.2025
+        const train = text.match(/\b0*(\d{3,6})\s+[A-Z]\s+\d{2}\.\d{2}\.\d{4}/)?.[1];
 
-        // HDV – 12 ciferné číslo
-        const fullHKV = text.match(/\b\d{12}\b/)?.[0];
+        // hlavné HKV – 12 číslic
+        const firstHKV = text.match(/\b\d{12}\b/)?.[0];
+
         let hdv=null;
-
-        if(fullHKV){
-            const last7 = fullHKV.slice(-7);
-            hdv=`${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
+        if(firstHKV){
+            const last7 = firstHKV.slice(-7);
+            hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
         }
 
         // rušňovodič
         const drv = text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\/\+?(\d+)/);
-        let phoneFmt=null;
 
+        let phoneFmt=null;
         if(drv?.[2]){
             phoneFmt = drv[2]
                 .replace(/^421/,"0")
                 .replace(/(\d{4})(\d{3})(\d{3})/,"$1/$2 $3");
         }
 
-        // počet vozidiel
         const wagons = text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
 
-        // sekcie
-        const priprah = extractHKV(text,"Príprahové");
-        const postrk = extractHKV(text,"Postrkové");
-        const vloz   = extractHKV(text,"Vložené");
-        const pohot  = extractHKV(text,"Na službu pohotové");
-        const nec    = extractHKV(text,"Nečinné");
-
-        const result={
+        const result = {
             dateTime,
             train,
             hdv,
-            driver:drv?.[1],
-            phone:phoneFmt,
+            driver: drv?.[1],
+            phone: phoneFmt,
             wagons,
-            priprahove:priprah,
-            postrkove:postrk,
-            vlozene:vloz,
-            pohotove:pohot,
-            necinne:nec
+            necinne: extractHKV(text,"Nečinné"),
+            priprahove: extractHKV(text,"Príprahové"),
+            postrkove: extractHKV(text,"Postrkové"),
+            vlozene: extractHKV(text,"Vložené"),
+            pohotove: extractHKV(text,"Na službu pohotové")
         };
 
         res.json(result);
 
-    }catch{
+    }catch(e){
         res.status(500).json({error:"PDF sa nepodarilo načítať"});
     }
 });
