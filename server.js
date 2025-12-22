@@ -23,8 +23,7 @@ app.post("/parse", async(req,res)=>{
             text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
 
         // vlak – 6 číslic pred R a dátumom
-        const train =
-            text.match(/\b0*(\d{3,6})(?=\s+[A-Z]\s+\d{2}\.\d{2}\.\d{4})/)?.[1];
+        const train = text.match(/\b0*(\d{3,6})\s+[A-Z][a-z]*\s+\d{2}\.\d{2}\.\d{4}/)?.[1];
 
         // prvé HKV
         const hkv = text.match(/\b\d{12}\b/)?.[0];
