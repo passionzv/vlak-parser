@@ -23,7 +23,9 @@ app.post("/parse", async(req,res)=>{
             text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
 
         // vlak – 6 číslic pred R a dátumom
-        const train = text.match(/\b0*(\d{3,6})\s+(?:R|Ex|Os)\b/s)?.[1];
+       const train = text.match(/\b0*(\d{3,6})\s+(?:R|Ex|Os)\b/)?.[1];
+       console.log("Vlak:", train);
+
 
 
 
