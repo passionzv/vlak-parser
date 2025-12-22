@@ -7,84 +7,89 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// keep alive
-app.get("/keepalive", (req,res)=>res.send("ok"));
+app.get("/keepalive",(req,res)=>res.send("ok"));
 
-// funkcia čo extrahuje HKV zo sekcií
-function decodeHKVSection(text,label){
+// extrakcia z konkrétnej sekcie
+function extractHKV(text, label) {
 
-    // nájde blok medzi nadpisom a ďalším prázdnym riadkom
-    const block = text.match(new RegExp(label + "\\s*([\\s\\S]*?)\\n\\s*\\n"));
-    if(!block) return null;
+    const regex = new RegExp(label + "[\\s\\S]*?(?=\\n[A-ZÁ-Ža-z ]+\\n|$)");
+    const block = text.match(regex);
 
-    // nájde všetky 12-ciferné kódy
-    const matches = block[1].match(/\b\d{12}\b/g);
-    if(!matches) return null;
+    if (!block) return null;
 
-    return matches.map(str=>{
+    const hkv = block[0].match(/\b\d{12}\b/g);
+    if (!hkv) return null;
+
+    return hkv.map(str=>{
         const last7 = str.slice(-7);
         return `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
     });
 }
 
+
 app.post("/parse", async (req,res)=>{
 
-    try {
-        const r = await fetch(req.body.url);
-        const arr = await r.arrayBuffer();
-        const parsed = await pdf(Buffer.from(arr));
+    try{
+        const pdfResp = await fetch(req.body.url);
+        const buffer = await pdfResp.arrayBuffer();
+        const parsed = await pdf(Buffer.from(buffer));
         const text = parsed.text;
 
         // dátum + čas
         const dateTime = text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
 
-        // extrakcia vlaku – číselný blok pred názvom vlaku
-        const train = text.match(/^\s*0*(\d{1,6})\s+[A-Z]/m)?.[1];
+        // vlak – ignorujeme čísla staníc, berieme priamo 0+vlakovú formu
+        const train = text.match(/\b0*(\d{3,6})\s+[A-Z](?=\s+\d\d\.)/)?.[1];
 
-        // prvé HDV
+        // HDV – 12 ciferné číslo
         const fullHKV = text.match(/\b\d{12}\b/)?.[0];
         let hdv=null;
 
         if(fullHKV){
             const last7 = fullHKV.slice(-7);
-            hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
+            hdv=`${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
         }
 
-        // rušňovodič + phone
-        const drv = text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\s*\/\+?(\d+)/);
+        // rušňovodič
+        const drv = text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\/\+?(\d+)/);
+        let phoneFmt=null;
 
-        let phoneFmt = null;
         if(drv?.[2]){
             phoneFmt = drv[2]
                 .replace(/^421/,"0")
                 .replace(/(\d{4})(\d{3})(\d{3})/,"$1/$2 $3");
         }
 
+        // počet vozidiel
         const wagons = text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
 
         // sekcie
-        const result = {
+        const priprah = extractHKV(text,"Príprahové");
+        const postrk = extractHKV(text,"Postrkové");
+        const vloz   = extractHKV(text,"Vložené");
+        const pohot  = extractHKV(text,"Na službu pohotové");
+        const nec    = extractHKV(text,"Nečinné");
+
+        const result={
             dateTime,
             train,
             hdv,
             driver:drv?.[1],
             phone:phoneFmt,
             wagons,
-            priprahove:decodeHKVSection(text,"Príprahové"),
-            postrkove:decodeHKVSection(text,"Postrkové"),
-            vlozene:decodeHKVSection(text,"Vložené"),
-            pohotove:decodeHKVSection(text,"Na službu pohotové"),
-            necinne:decodeHKVSection(text,"Nečinné")
+            priprahove:priprah,
+            postrkove:postrk,
+            vlozene:vloz,
+            pohotove:pohot,
+            necinne:nec
         };
 
         res.json(result);
 
-    }catch(err){
-        res.status(500).json({error:"PDF sa nedá spracovať"});
+    }catch{
+        res.status(500).json({error:"PDF sa nepodarilo načítať"});
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,"0.0.0.0",()=>{
-    console.log("Server running on port "+PORT);
-});
+app.listen(PORT,"0.0.0.0",()=>console.log("Server running on port",PORT));
