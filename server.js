@@ -7,6 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// keepalive pre Render
 app.get("/keepalive",(req,res)=>res.send("ok"));
 
 app.post("/parse", async(req,res)=>{
@@ -18,23 +19,26 @@ app.post("/parse", async(req,res)=>{
         const text = parsed.text;
 
         // dátum + čas
-        const dateTime = text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
+        const dateTime =
+            text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
 
-        // vlak - jedinečný vzor: číslo, R, dátum
+        // vlak – 6 číslic pred R a dátumom
         const train =
-            text.match(/\b0*(\d{3,6})\s+R\s+\d{2}\.\d{2}\.\d{4}/)?.[1];
+            text.match(/\b0*(\d{3,6})(?=\s+[A-Z]\s+\d{2}\.\d{2}\.\d{4})/)?.[1];
 
-        // HDV - prvé 12 číslic kdekoľvek v texte
+        // prvé HKV
         const hkv = text.match(/\b\d{12}\b/)?.[0];
 
         let hdv = null;
         if(hkv){
             const last7 = hkv.slice(-7);
-            hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
+            hdv =
+                `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
         }
 
-        // rušňovodič
-        const drv = text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\s*\/\+?(\d+)/);
+        // rušňovodič + phone
+        const drv =
+            text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\s*\/\+?(\d+)/);
 
         let phoneFmt=null;
         if(drv?.[2]){
@@ -44,7 +48,8 @@ app.post("/parse", async(req,res)=>{
         }
 
         // počet vozidiel
-        const wagons = text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
+        const wagons =
+            text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
 
         res.json({
             dateTime,
@@ -61,6 +66,4 @@ app.post("/parse", async(req,res)=>{
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,"0.0.0.0",()=>{
-    console.log("Server running on port "+PORT);
-});
+app.listen(PORT,"0.0.0.0",()=>console.log("Server running on port",PORT));
