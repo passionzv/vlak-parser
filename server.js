@@ -18,6 +18,11 @@ app.post("/parse", async(req,res)=>{
         const parsed = await pdf(Buffer.from(buf));
         const text = parsed.text;
 
+        console.log("==== RAW TEXT START ====");
+        console.log(text.substring(0,600));
+        console.log("==== RAW TEXT END ====");
+
+
         // dátum + čas
         const dateTime =
             text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
