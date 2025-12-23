@@ -19,8 +19,9 @@ app.post("/parse", async(req,res)=>{
         const text = parsed.text;
 
         console.log("==== RAW TEXT START ====");
-        console.log(text.substring(0,600));
+        console.log(text.substring(0,800));
         console.log("==== RAW TEXT END ====");
+
 
 
         // dátum + čas
