@@ -18,10 +18,9 @@ app.post("/parse", async (req, res) => {
         const dateTime =
             text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0] ?? null;
 
-        /* ===== ČÍSLO VLAKU (R / Os / Ex / …) ===== */
-        const trainMatch =
-            text.match(/\b0*(\d{3,6})\s+[A-Z]{1,3}\s+\d{2}\.\d{2}\.\d{4}/);
-        const train = trainMatch ? trainMatch[1] : null;
+        /* ===== ČÍSLO VLAKU – FINÁLNE RIEŠENIE ===== */
+        const trainMatch = text.match(/\b0(\d{5})\b/);
+        const train = trainMatch ? trainMatch[1].replace(/^0+/, "") : null;
 
         /* ===== HKV / HDV ===== */
         const hkvMatch = text.match(/\b\d{12}\b/);
