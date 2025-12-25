@@ -7,72 +7,60 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// keepalive pre Render
-app.get("/keepalive",(req,res)=>res.send("ok"));
-
-app.post("/parse", async(req,res)=>{
-
-    try{
+app.post("/parse", async (req, res) => {
+    try {
         const pdfResp = await fetch(req.body.url);
         const buf = await pdfResp.arrayBuffer();
         const parsed = await pdf(Buffer.from(buf));
         const text = parsed.text;
 
-        console.log("==== RAW TEXT START ====");
-        console.log(text.substring(0,800));
-        console.log("==== RAW TEXT END ====");
-
-
-
-        // dátum + čas
+        /* ===== DÁTUM A ČAS ===== */
         const dateTime =
-            text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0];
+            text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0] ?? null;
 
-        // vlak – 6 číslic pred R a dátumom
-       const train = text.match(/\b0*(\d{3,6})\s+(?:R|Ex|Os)\b/)?.[1];
-       console.log("Vlak:", train);
+        /* ===== ČÍSLO VLAKU (R / Os / Ex / …) ===== */
+        const trainMatch =
+            text.match(/\b0*(\d{3,6})\s+[A-Z]{1,3}\s+\d{2}\.\d{2}\.\d{4}/);
+        const train = trainMatch ? trainMatch[1] : null;
 
-
-
-
-        // prvé HKV
-        const hkv = text.match(/\b\d{12}\b/)?.[0];
-
+        /* ===== HKV / HDV ===== */
+        const hkvMatch = text.match(/\b\d{12}\b/);
         let hdv = null;
-        if(hkv){
-            const last7 = hkv.slice(-7);
-            hdv =
-                `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
+        if (hkvMatch) {
+            const s = hkvMatch[0].slice(-7);
+            hdv = `${s.slice(0,3)}.${s.slice(3,6)}-${s.slice(6)}`;
         }
 
-        // rušňovodič + phone
+        /* ===== RUŠŇOVODIČ + TELEFÓN ===== */
         const drv =
-            text.match(/-\s+([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\s*\/\+?(\d+)/);
+            text.match(/-\s*([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\/\+?(\d+)/);
 
-        let phoneFmt=null;
-        if(drv?.[2]){
-            phoneFmt = drv[2]
-                .replace(/^421/,"0")
-                .replace(/(\d{4})(\d{3})(\d{3})/,"$1/$2 $3");
+        let phone = null;
+        if (drv?.[2]) {
+            phone = drv[2]
+                .replace(/^421/, "0")
+                .replace(/(\d{4})(\d{3})(\d{3})/, "$1/$2 $3");
         }
 
-        // počet vozidiel
+        /* ===== POČET VOZIDIEL ===== */
         const wagons =
-            text.match(/Počet dopravovaných vozidiel.*?(\d+)/)?.[1];
+            text.match(/Počet dopravovaných vozidiel vo vlaku:\s*(\d+)/)?.[1] ?? null;
 
         res.json({
             dateTime,
             train,
             hdv,
-            driver: drv?.[1],
-            phone: phoneFmt,
+            driver: drv?.[1] ?? null,
+            phone,
             wagons
         });
 
-    }catch(e){
-        res.status(500).json({error:"PDF sa nepodarilo načítať"});
+    } catch (e) {
+        res.status(500).json({ error: "PDF sa nepodarilo spracovať" });
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,"0.0.0.0",()=>console.log("Server running on port",PORT));
+app.listen(PORT, "0.0.0.0", () => {
+    console.log("Server running on port", PORT);
+});
