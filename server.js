@@ -1,65 +1,88 @@
 import express from "express";
 import fetch from "node-fetch";
-import pdf from "pdf-parse";
 import cors from "cors";
+import pdfParse from "pdf-parse";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
+/* ===== middleware ===== */
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+
+/* ===== ROOT ROUTE (KRITICKÉ!) ===== */
+app.get("/", (req, res) => {
+    res.status(200).send("OK");
+});
+
+/* ===== KEEPALIVE / HEALTHCHECK ===== */
+app.get("/ping", (req, res) => {
+    res.json({ status: "alive", time: new Date().toISOString() });
+});
+
+/* ===== PDF PARSER ===== */
 app.post("/parse", async (req, res) => {
     try {
-        const pdfResp = await fetch(req.body.url);
-        const buf = await pdfResp.arrayBuffer();
-        const parsed = await pdf(Buffer.from(buf));
-        const text = parsed.text;
+        const { url } = req.body;
 
-        /* ===== DÁTUM A ČAS ===== */
-        const dateTime =
-            text.match(/\b\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}/)?.[0] ?? null;
-
-        /* ===== ČÍSLO VLAKU – FINÁLNE RIEŠENIE ===== */
-        const trainMatch = text.match(/\b0(\d{5})\b/);
-        const train = trainMatch ? trainMatch[1].replace(/^0+/, "") : null;
-
-        /* ===== HKV / HDV ===== */
-        const hkvMatch = text.match(/\b\d{12}\b/);
-        let hdv = null;
-        if (hkvMatch) {
-            const s = hkvMatch[0].slice(-7);
-            hdv = `${s.slice(0,3)}.${s.slice(3,6)}-${s.slice(6)}`;
+        if (!url) {
+            return res.status(400).json({ error: "Missing PDF URL" });
         }
 
-        /* ===== RUŠŇOVODIČ + TELEFÓN ===== */
-        const drv =
-            text.match(/-\s*([A-Za-zÁ-ž]+\s+[A-Za-zÁ-ž]+)\/\+?(\d+)/);
+        console.log("Downloading PDF:", url);
+
+        const pdfResponse = await fetch(url);
+
+        if (!pdfResponse.ok) {
+            throw new Error("PDF download failed");
+        }
+
+        const buffer = Buffer.from(await pdfResponse.arrayBuffer());
+        const pdfData = await pdfParse(buffer);
+        const text = pdfData.text.replace(/\r/g, "");
+
+        /* ===== DÁTUM A ČAS ===== */
+        const dateTimeMatch = text.match(
+            /(\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2})/
+        );
+        const dateTime = dateTimeMatch ? dateTimeMatch[1] : null;
+
+        /* ===== HKV (HDV) ===== */
+        const hdvMatch = text.match(/\b(7\d{2}\.\d{3}-\d)\b/);
+        const hdv = hdvMatch ? hdvMatch[1] : null;
+
+        /* ===== RUŠŇOVODIČ + TEL ===== */
+        const driverMatch = text.match(/-\s*([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][^\n\/]+)\/\+421(\d{9})/);
+        const driver = driverMatch ? driverMatch[1].trim() : null;
 
         let phone = null;
-        if (drv?.[2]) {
-            phone = drv[2]
-                .replace(/^421/, "0")
-                .replace(/(\d{4})(\d{3})(\d{3})/, "$1/$2 $3");
+        if (driverMatch) {
+            const raw = driverMatch[2]; // 904893233
+            phone = "0" + raw.slice(0, 3) + "/" + raw.slice(3, 6) + " " + raw.slice(6);
         }
 
         /* ===== POČET VOZIDIEL ===== */
-        const wagons =
-            text.match(/Počet dopravovaných vozidiel vo vlaku:\s*(\d+)/)?.[1] ?? null;
+        const wagonsMatch = text.match(/Počet dopravovaných vozidiel vo vlaku:\s*(\d+)/);
+        const wagons = wagonsMatch ? wagonsMatch[1] : null;
 
+        /* ===== VÝSTUP ===== */
         res.json({
             dateTime,
-            train,
+            train: null,          // ÚMYSELNE – vlak sa NEZOBRAZUJE (podľa tvojej požiadavky)
             hdv,
-            driver: drv?.[1] ?? null,
+            driver,
             phone,
             wagons
         });
 
-    } catch (e) {
-        res.status(500).json({ error: "PDF sa nepodarilo spracovať" });
+    } catch (err) {
+        console.error("Parse error:", err);
+        res.status(500).json({ error: "PDF parse failed" });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
-    console.log("Server running on port", PORT);
+/* ===== SERVER START ===== */
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
