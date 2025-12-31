@@ -5,17 +5,21 @@ import pdfParse from "pdf-parse";
 
 const app = express();
 
-/* ===== middleware ===== */
+/* ===== MIDDLEWARE ===== */
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-/* ===== ROOT ROUTE (KRITICKÉ!) ===== */
+/* ===== ROOT (Render potrebuje!) ===== */
 app.get("/", (req, res) => {
     res.status(200).send("OK");
 });
 
-/* ===== KEEPALIVE / HEALTHCHECK ===== */
+/* ===== KEEPALIVE ENDPOINTY ===== */
 app.get("/ping", (req, res) => {
+    res.json({ status: "alive", time: new Date().toISOString() });
+});
+
+app.get("/keepalive", (req, res) => {
     res.json({ status: "alive", time: new Date().toISOString() });
 });
 
@@ -31,7 +35,6 @@ app.post("/parse", async (req, res) => {
         console.log("Downloading PDF:", url);
 
         const pdfResponse = await fetch(url);
-
         if (!pdfResponse.ok) {
             throw new Error("PDF download failed");
         }
@@ -46,12 +49,15 @@ app.post("/parse", async (req, res) => {
         );
         const dateTime = dateTimeMatch ? dateTimeMatch[1] : null;
 
-        /* ===== HKV (HDV) ===== */
+        /* ===== HDV ===== */
         const hdvMatch = text.match(/\b(7\d{2}\.\d{3}-\d)\b/);
         const hdv = hdvMatch ? hdvMatch[1] : null;
 
         /* ===== RUŠŇOVODIČ + TEL ===== */
-        const driverMatch = text.match(/-\s*([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][^\n\/]+)\/\+421(\d{9})/);
+        const driverMatch = text.match(
+            /-\s*([A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ][^\n\/]+)\/\+421(\d{9})/
+        );
+
         const driver = driverMatch ? driverMatch[1].trim() : null;
 
         let phone = null;
@@ -60,14 +66,16 @@ app.post("/parse", async (req, res) => {
             phone = "0" + raw.slice(0, 3) + "/" + raw.slice(3, 6) + " " + raw.slice(6);
         }
 
-        /* ===== POČET VOZIDIEL ===== */
-        const wagonsMatch = text.match(/Počet dopravovaných vozidiel vo vlaku:\s*(\d+)/);
+        /* ===== VOZIDLÁ ===== */
+        const wagonsMatch = text.match(
+            /Počet dopravovaných vozidiel vo vlaku:\s*(\d+)/
+        );
         const wagons = wagonsMatch ? wagonsMatch[1] : null;
 
-        /* ===== VÝSTUP ===== */
+        /* ===== ODPOVEĎ ===== */
         res.json({
             dateTime,
-            train: null,          // ÚMYSELNE – vlak sa NEZOBRAZUJE (podľa tvojej požiadavky)
+            train: null, // ZÁMERNE – vlak NEZOBRAZUJEME
             hdv,
             driver,
             phone,
@@ -80,7 +88,7 @@ app.post("/parse", async (req, res) => {
     }
 });
 
-/* ===== SERVER START ===== */
+/* ===== START SERVERA ===== */
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
