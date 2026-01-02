@@ -5,16 +5,15 @@ import pdfParse from "pdf-parse";
 
 const app = express();
 
-/* ===== MIDDLEWARE ===== */
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-/* ===== ROOT (Render potrebuje!) ===== */
+/* ROOT */
 app.get("/", (req, res) => {
-    res.status(200).send("OK");
+    res.send("OK");
 });
 
-/* ===== KEEPALIVE ENDPOINTY ===== */
+/* KEEPALIVE */
 app.get("/ping", (req, res) => {
     res.json({ status: "alive", time: new Date().toISOString() });
 });
@@ -23,35 +22,35 @@ app.get("/keepalive", (req, res) => {
     res.json({ status: "alive", time: new Date().toISOString() });
 });
 
-/* ===== PDF PARSER ===== */
+/* PARSE PDF */
 app.post("/parse", async (req, res) => {
     try {
         const { url } = req.body;
+        if (!url) return res.status(400).json({ error: "Missing URL" });
 
-        if (!url) {
-            return res.status(400).json({ error: "Missing PDF URL" });
-        }
-
-        console.log("Downloading PDF:", url);
-
-        const pdfResponse = await fetch(url);
-        if (!pdfResponse.ok) {
-            throw new Error("PDF download failed");
-        }
-
-        const buffer = Buffer.from(await pdfResponse.arrayBuffer());
-        const pdfData = await pdfParse(buffer);
-        const text = pdfData.text.replace(/\r/g, "");
+        const response = await fetch(url);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const pdf = await pdfParse(buffer);
+        const text = pdf.text.replace(/\r/g, "");
 
         /* ===== DÁTUM A ČAS ===== */
         const dateTimeMatch = text.match(
-            /(\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2})/
+            /(\d{1,2}\.\d{1,2}\.\d{4})\s+(\d{1,2}:\d{2})/
         );
-        const dateTime = dateTimeMatch ? dateTimeMatch[1] : null;
+        const dateTime = dateTimeMatch
+            ? `${dateTimeMatch[1]} ${dateTimeMatch[2]}`
+            : null;
 
-        /* ===== HDV ===== */
-        const hdvMatch = text.match(/\b(7\d{2}\.\d{3}-\d)\b/);
-        const hdv = hdvMatch ? hdvMatch[1] : null;
+        /* ===== HDV – výpočet z 12-miestneho čísla ===== */
+        let hdv = null;
+        const hdvRawMatch = text.match(/\b9\d{11}\b/);
+        if (hdvRawMatch) {
+            const raw = hdvRawMatch[0]; // napr. 925617540834
+            const series = raw.substring(4, 7); // 754
+            const number = raw.substring(7, 10); // 083
+            const check = raw.substring(10, 11); // 4
+            hdv = `${series}.${number}-${check}`;
+        }
 
         /* ===== RUŠŇOVODIČ + TEL ===== */
         const driverMatch = text.match(
@@ -62,8 +61,8 @@ app.post("/parse", async (req, res) => {
 
         let phone = null;
         if (driverMatch) {
-            const raw = driverMatch[2]; // 904893233
-            phone = "0" + raw.slice(0, 3) + "/" + raw.slice(3, 6) + " " + raw.slice(6);
+            const p = driverMatch[2];
+            phone = `0${p.slice(0,3)}/${p.slice(3,6)} ${p.slice(6)}`;
         }
 
         /* ===== VOZIDLÁ ===== */
@@ -72,25 +71,23 @@ app.post("/parse", async (req, res) => {
         );
         const wagons = wagonsMatch ? wagonsMatch[1] : null;
 
-        /* ===== ODPOVEĎ ===== */
         res.json({
             dateTime,
-            train: null, // ZÁMERNE – vlak NEZOBRAZUJEME
+            train: null, // zámerne nevypisujeme
             hdv,
             driver,
             phone,
             wagons
         });
 
-    } catch (err) {
-        console.error("Parse error:", err);
-        res.status(500).json({ error: "PDF parse failed" });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Parse failed" });
     }
 });
 
-/* ===== START SERVERA ===== */
+/* START */
 const PORT = process.env.PORT || 10000;
-
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
