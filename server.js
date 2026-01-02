@@ -42,15 +42,15 @@ app.post("/parse", async (req, res) => {
         );
         const dateTime = dateTimeMatch ? dateTimeMatch[1] : null;
 
-        /* ===== HDV (POSLEDNÝCH 7 ČÍSLIC) ===== */
-        let hdv = null;
-        const hdvRawMatch = text.match(/\b(\d{7,})\b/);
+        // hlavné HKV – 12 číslic
+        const firstHKV = text.match(/\b\d{12}\b/)?.[0];
 
-        if (hdvRawMatch) {
-            const raw = hdvRawMatch[1];
-            const last7 = raw.slice(-7); // napr. 7540834
-            hdv = `${last7.slice(0, 3)}.${last7.slice(3, 6)}-${last7.slice(6)}`;
+        let hdv=null;
+        if(firstHKV){
+            const last7 = firstHKV.slice(-7);
+            hdv = `${last7.slice(0,3)}.${last7.slice(3,6)}-${last7.slice(6)}`;
         }
+
 
         /* ===== RUŠŇOVODIČ + TEL ===== */
         const driverMatch = text.match(
